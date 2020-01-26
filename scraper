@@ -1,0 +1,63 @@
+#!/usr/local/bin/python3.7
+
+from bs4 import BeautifulSoup
+import requests
+import base64
+import sys
+import json
+
+if len(sys.argv) != 2:
+    print(f"Usage: {sys.argv[0]} <tasty.co recipe>", file=sys.stderr)
+    exit(1)
+
+link = sys.argv[1]
+
+data = requests.get(link)
+soup = BeautifulSoup(data.text, 'html.parser')
+
+title = soup.find('h1', { 'class' : 'recipe-name' }).text
+description = soup.find('p', { 'class' : 'description' }).text
+author = soup.find('span', { 'class' : 'byline' }).text
+
+timings = soup.find('div', { 'class' : 'mobile-cooktimes' })
+total = timings.find_all('p', { 'class' : 'md-hide' })[0].text
+prep = timings.find_all('p', { 'class' : 'md-hide' })[1].text
+cook = timings.find_all('p', { 'class' : 'md-hide' })[2].text
+
+servings = soup.find('p', { 'class' : 'servings-display'}).text
+
+ingredient_lists = soup.find_all('div', { 'class' : 'ingredients__section' })
+ingredients = {}
+for list in ingredient_lists:
+    list_name = list.find('p', { 'class' : 'ingredient-section-name' }).text
+    ingredients[list_name] = []
+    raw_ingredients = list.find_all('li', { 'class' : 'ingredient' })
+    for ingredient in raw_ingredients:
+        ingredients[list_name].append(ingredient.text)
+
+procedure = soup.find('ol', { 'class' : 'prep-steps' })
+raw_steps = procedure.find_all('li', { 'class' : 'xs-mb2' })
+steps = []
+for step in raw_steps:
+    steps.append(step.text)
+
+poster_url = soup.find('meta', { 'property' : 'og:image' }).get('content')
+poster_data = requests.get(poster_url).content
+poster = base64.b64encode(poster_data)
+
+tojson = {}
+tojson["link"] = link
+tojson["title"] = title
+tojson["description"] = description
+tojson["author"] = author
+tojson["poster_url"] = poster_url
+tojson["poster"] = "data:image/jpg;base64," + poster.decode('utf-8')
+tojson["timings"] = {}
+tojson["timings"]["total"] = total
+tojson["timings"]["prep"] = prep
+tojson["timings"]["cook"] = cook
+tojson["servings"] = servings
+tojson["ingredients"] = ingredients
+tojson["steps"] = steps
+
+print(json.dumps(tojson))
